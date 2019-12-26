@@ -134,13 +134,12 @@ def init_Log_Monitor(url):
     write_currentSTH(get_sth_from_log(url))
 
 def check_for_match(common_name):
-    result = ""
+    result = None
     if os.path.isfile("domains.conf"):
         domains = [line.rstrip('\n') for line in open('domains.conf')]
         for domain in domains:
             if domain in common_name:
-                #print(domain)
-                result += domain
+                result = domain
     else:
         print("Can't find domains to check against.")
     return result
@@ -158,8 +157,9 @@ def check_for_new_sth(url):
     else:
         print("New STH found!")
         write_currentSTH(new_sth)
-        #entries = get_entries(url,current_sth['tree_size'],new_sth['tree_size'])
-        entries = get_entries(url,567318792,567318792)
+        entries = get_entries(url,current_sth.tree_size,new_sth.tree_size)
+        #Debug
+        #entries = get_entries(url,567318792,567318792)
         p_entries=(_parse_entries(entries))
         print("Matching and parsing %d entries..." % len(entries))
         #print(p_entries)
@@ -178,15 +178,14 @@ def check_for_new_sth(url):
                 file.close"""
                 #print(der_cert)
             else:
-                print("Ups")
+                #print("Ups")
                 der_cert = d_entry.extra_data.precert_chain_entry.pre_certificate
             cert = x509.load_der_x509_certificate(der_cert,default_backend())
             regex = re.compile(r'(?<=CN\=)[A-Z0-9a-z\-*.]*')
             common_name = regex.search(cert.subject.rfc4514_string()).group(0)
-            matches = check_for_match(common_name)
-            if matches == None:
-                print("No matches")
-            else:
+            #print(common_name)
+            matches=check_for_match(common_name)
+            if matches:
                 store_certificate(der_cert,cert.serial_number)
                 print("Certificate with serial number %s matched with domain %s!" % (cert.serial_number,matches))
             #print(der_chain)
@@ -204,9 +203,6 @@ def check_for_new_sth(url):
                 print("Cert with serial number %s matched with domain %s" % (cert.fingerprint(cert.signature_hash_algorithm),matches))
         """
         
-
-
-
 def main():
     print("Maximum is 256 entries per request in Google Log.")
     google_log = "https://ct.googleapis.com/pilot/"
