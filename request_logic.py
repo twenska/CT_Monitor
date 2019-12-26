@@ -7,6 +7,8 @@ import json
 import logging
 import entry_decoder
 from google.protobuf.json_format import MessageToJson
+import re
+
 
 
 def _parse_sth(sth_body):
@@ -72,7 +74,6 @@ def get_entries(url, start, end):
     #data = requests.request("get",get_entries_url, params=params)
     data = requests.get(get_entries_url, params=params)
     if data.status_code == 200:
-        print ('Success')
         return(data.content)
     else:
         print("Error getting entries.\n Status code: %s" % (data.status_code))
@@ -99,6 +100,12 @@ def write_currentSTH(sth):
     file.write(MessageToJson(sth, preserving_proto_field_name=True))
     file.close
 
+def store_certificate(cert, name):
+    #cert MUST BE from DER Encoded (binary); Name SHOULD BE the serial number
+    f_name = str(name)
+    file = open("certificates/"+f_name+".der","wb")
+    file.write(cert)
+    file.close
 def read_currentSTH():
     #Get current STH from file
     file = open("current_sth.json","r")
@@ -126,13 +133,13 @@ def init_Log_Monitor(url):
     print("Getting initial Signed Tree Head")
     write_currentSTH(get_sth_from_log(url))
 
-def check_for_match(cert_subject):
+def check_for_match(common_name):
     result = ""
     if os.path.isfile("domains.conf"):
         domains = [line.rstrip('\n') for line in open('domains.conf')]
         for domain in domains:
-            if domain in cert_subject:
-                print(domain)
+            if domain in common_name:
+                #print(domain)
                 result += domain
     else:
         print("Can't find domains to check against.")
@@ -144,16 +151,17 @@ def check_for_new_sth(url):
     #Compare the two STH's hash.
     #If they are equal we don't have to do anything.
     #If they are different there are new entries in the logs we have to check.
-    #if current_sth['sha256_root_hash'] == new_sth['sha256_root_hash']:
     if current_sth.sha256_root_hash == new_sth.sha256_root_hash:
     #DEBUG
     #if current_sth.tree_head_signature != current_sth.tree_head_signature:
         print("No new STH found. Going back to sleep.")
     else:
         print("New STH found!")
+        write_currentSTH(new_sth)
         #entries = get_entries(url,current_sth['tree_size'],new_sth['tree_size'])
         entries = get_entries(url,567318792,567318792)
         p_entries=(_parse_entries(entries))
+        print("Matching and parsing %d entries..." % len(entries))
         #print(p_entries)
         #heavily inspired by https://github.com/google/certificate-transparency/blob/master/python/ct/client/monitor.py#L295
         for entry in p_entries:
@@ -164,15 +172,23 @@ def check_for_new_sth(url):
             #If the entry includes a certificate
             if ts_entry.entry_type == client_pb2.X509_ENTRY:
                 der_cert = ts_entry.asn1_cert
-                file = open("cert.der","wb")
+                #debug output
+                """file = open("cert.der","wb")
                 file.write(der_cert)
-                file.close
+                file.close"""
                 #print(der_cert)
-                
             else:
                 print("Ups")
                 der_cert = d_entry.extra_data.precert_chain_entry.pre_certificate
-
+            cert = x509.load_der_x509_certificate(der_cert,default_backend())
+            regex = re.compile(r'(?<=CN\=)[A-Z0-9a-z\-*.]*')
+            common_name = regex.search(cert.subject.rfc4514_string()).group(0)
+            matches = check_for_match(common_name)
+            if matches == None:
+                print("No matches")
+            else:
+                store_certificate(der_cert,cert.serial_number)
+                print("Certificate with serial number %s matched with domain %s!" % (cert.serial_number,matches))
             #print(der_chain)
         """entries = entries.json()
         for entry in entries['entries']:
@@ -187,7 +203,7 @@ def check_for_new_sth(url):
             else:
                 print("Cert with serial number %s matched with domain %s" % (cert.fingerprint(cert.signature_hash_algorithm),matches))
         """
-        write_currentSTH(new_sth)
+        
 
 
 
