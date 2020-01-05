@@ -141,7 +141,7 @@ def check_for_match(common_name):
             if domain in common_name:
                 result = domain
     else:
-        print("Can't find domains to check against.")
+        result = ""
     return result
 
 def check_for_new_sth(url):
@@ -184,11 +184,14 @@ def check_for_new_sth(url):
             regex = re.compile(r'(?<=CN\=)[A-Z0-9a-z\-*.]*')
             common_name = regex.search(cert.subject.rfc4514_string()).group(0)
             #print(common_name)
-            matches=check_for_match(common_name)
-            if matches:
-                store_certificate(der_cert,cert.serial_number)
-                print("Certificate with serial number %s matched with domain %s!" % (cert.serial_number,matches))
-            #print(der_chain)
+            if os.path.isfile("domains.conf"):
+                matches=check_for_match(common_name)
+                if matches:
+                    store_certificate(der_cert,cert.serial_number)
+                    print("Certificate with serial number %s matched with domain %s!" % (cert.serial_number,matches))
+            else:
+                print("Can't find domains to check against. \n Ending...")
+                #print(der_chain)
         """entries = entries.json()
         for entry in entries['entries']:
             raw = base64.b64decode(entry['leaf_input'])
